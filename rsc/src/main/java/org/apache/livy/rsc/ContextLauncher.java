@@ -17,12 +17,10 @@
 
 package org.apache.livy.rsc;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
@@ -32,6 +30,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -43,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
+import io.hops.security.CertificateLocalizationCtx;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.concurrent.Promise;
 import org.apache.spark.launcher.SparkLauncher;
@@ -70,6 +70,7 @@ class ContextLauncher {
   private static final String SPARK_JARS_KEY = "spark.jars";
   private static final String SPARK_ARCHIVES_KEY = "spark.yarn.dist.archives";
   private static final String SPARK_HOME_ENV = "SPARK_HOME";
+  private static final String MATERIAL_DIRECTORY = "MATERIAL_DIRECTORY";
 
   static DriverProcessInfo create(RSCClientFactory factory, RSCConf conf)
       throws IOException {
@@ -160,7 +161,7 @@ class ContextLauncher {
   }
 
   private static ChildProcess startDriver(final RSCConf conf, Promise<?> promise)
-      throws IOException {
+          throws IOException, InterruptedException {
     String livyJars = conf.get(LIVY_JARS);
     if (livyJars == null) {
       String livyHome = System.getenv("LIVY_HOME");
@@ -238,7 +239,16 @@ class ContextLauncher {
       };
       return new ChildProcess(conf, promise, child, confFile);
     } else {
-      final SparkLauncher launcher = new SparkLauncher();
+      String username = conf.get("spark.executorEnv.HADOOP_USER_NAME");
+      String materialDirectory = CertificateLocalizationCtx.getInstance()
+              .getCertificateLocalization().getX509MaterialLocation(username)
+              .getCertFolder().toFile().getAbsolutePath();
+
+      Map env = new HashMap<String, String>() {{
+        put(MATERIAL_DIRECTORY, materialDirectory);
+      }};
+
+      final SparkLauncher launcher = new SparkLauncher(env);
       launcher.setSparkHome(System.getenv(SPARK_HOME_ENV));
       launcher.setAppResource(SparkLauncher.NO_RESOURCE);
       launcher.setPropertiesFile(confFile.getAbsolutePath());

@@ -17,9 +17,9 @@
 
 package org.apache.livy.sessions
 
+import io.hops.security.CertificateLocalizationCtx
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.mutable
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
@@ -130,6 +130,10 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
     session.stop().map { case _ =>
       try {
         sessionStore.remove(sessionType, session.id)
+
+        CertificateLocalizationCtx.getInstance
+          .getCertificateLocalization.removeX509Material(session.proxyUser.get)
+
         synchronized {
           sessions.remove(session.id)
           session.name.foreach(sessionsByName.remove)

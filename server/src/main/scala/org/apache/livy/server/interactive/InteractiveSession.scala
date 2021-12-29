@@ -21,16 +21,18 @@ import java.io.{File, InputStream}
 import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.file.{Files, Paths}
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.{Random, Try}
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import io.hops.security.CertificateLocalizationCtx
 import org.apache.hadoop.fs.Path
 import org.apache.spark.launcher.SparkLauncher
 
@@ -44,6 +46,7 @@ import org.apache.livy.sessions._
 import org.apache.livy.sessions.Session._
 import org.apache.livy.sessions.SessionState.Dead
 import org.apache.livy.utils._
+
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 case class InteractiveRecoveryMetadata(
@@ -83,6 +86,8 @@ object InteractiveSession extends Logging {
         request.conf, request.jars, request.files, request.archives, request.pyFiles, livyConf))
 
       val builderProperties = prepareBuilderProp(conf, request.kind, livyConf)
+
+      setCertificates(request.cert, proxyUser.get)
 
       val userOpts: Map[String, Option[String]] = Map(
         "spark.driver.cores" -> request.driverCores.map(_.toString),
@@ -360,6 +365,34 @@ object InteractiveSession extends Logging {
     }
 
     builderProperties
+  }
+
+  private[interactive] def setCertificates(
+    certsRequest: Map[String, String],
+    username: String): Unit = {
+      var password: String = null
+      var trustStore: ByteBuffer = null
+      var keyStore: ByteBuffer = null
+      // TODO(Fabio): We know the filenames, this can be rewritten do
+      // do the actual lookup
+      certsRequest foreach {
+        case (key, value) =>
+          if (key.endsWith(".key")) {
+            password = value
+          } else if (key.endsWith(".jks")) {
+            val decoded = Base64.getDecoder.decode(value)
+            val byteBuffer = ByteBuffer.wrap(decoded)
+
+            if (key.endsWith("tstore.jks")) {
+              trustStore = byteBuffer
+            } else if (key.endsWith("kstore.jks")) {
+              keyStore = byteBuffer
+            }
+          }
+      }
+
+      CertificateLocalizationCtx.getInstance.getCertificateLocalization
+        .materializeCertificates(username, username, keyStore, password, trustStore, password)
   }
 }
 

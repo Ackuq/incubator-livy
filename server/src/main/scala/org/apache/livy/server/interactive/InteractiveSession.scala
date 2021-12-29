@@ -24,18 +24,16 @@ import java.nio.file.{Files, Paths}
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.{Random, Try}
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import io.hops.security.CertificateLocalizationCtx
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.net.HopsSSLSocketFactory
 import org.apache.spark.launcher.SparkLauncher
-
 import org.apache.livy._
 import org.apache.livy.client.common.HttpMessages._
 import org.apache.livy.rsc.{PingJob, RSCClient, RSCConf}
@@ -370,26 +368,15 @@ object InteractiveSession extends Logging {
   private[interactive] def setCertificates(
     certsRequest: Map[String, String],
     username: String): Unit = {
-      var password: String = null
-      var trustStore: ByteBuffer = null
-      var keyStore: ByteBuffer = null
-      // TODO(Fabio): We know the filenames, this can be rewritten do
-      // do the actual lookup
-      certsRequest foreach {
-        case (key, value) =>
-          if (key.endsWith(".key")) {
-            password = value
-          } else if (key.endsWith(".jks")) {
-            val decoded = Base64.getDecoder.decode(value)
-            val byteBuffer = ByteBuffer.wrap(decoded)
 
-            if (key.endsWith("tstore.jks")) {
-              trustStore = byteBuffer
-            } else if (key.endsWith("kstore.jks")) {
-              keyStore = byteBuffer
-            }
-          }
+      def decode(value: String): ByteBuffer = {
+        val decoded = Base64.getDecoder.decode(value)
+        ByteBuffer.wrap(decoded)
       }
+
+      var password: String = certsRequest(username + HopsSSLSocketFactory.PASSWD_FILE_SUFFIX)
+      var trustStore: ByteBuffer = decode(certsRequest(username + HopsSSLSocketFactory.TRUSTSTORE_SUFFIX))
+      var keyStore: ByteBuffer = decode(certsRequest(username + HopsSSLSocketFactory.KEYSTORE_SUFFIX))
 
       CertificateLocalizationCtx.getInstance.getCertificateLocalization
         .materializeCertificates(username, username, keyStore, password, trustStore, password)

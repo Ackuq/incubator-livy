@@ -239,12 +239,11 @@ class ContextLauncher {
       };
       return new ChildProcess(conf, promise, child, confFile);
     } else {
-      String username = conf.get("spark.executorEnv.HADOOP_USER_NAME");
       String materialDirectory = CertificateLocalizationCtx.getInstance()
-              .getCertificateLocalization().getX509MaterialLocation(username)
-              .getCertFolder().toFile().getAbsolutePath();
+              .getCertificateLocalization().getX509MaterialLocation(conf.get(PROXY_USER))
+              .getCertFolder().toString();
 
-      Map env = new HashMap<String, String>() {{
+      Map<String, String> env = new HashMap<String, String>() {{
         put(MATERIAL_DIRECTORY, materialDirectory);
       }};
 

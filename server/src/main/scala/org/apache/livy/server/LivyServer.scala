@@ -27,8 +27,10 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
+import io.hops.security.{CertificateLocalizationCtx, CertificateLocalizationService}
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.authentication.server._
+import org.apache.hadoop.util.ShutdownHookManager
 import org.eclipse.jetty.servlet.FilterHolder
 import org.scalatra.{NotFound, ScalatraServlet}
 import org.scalatra.metrics.MetricsBootstrap
@@ -147,6 +149,9 @@ class LivyServer extends Logging {
       SparkYarnApp.init(livyConf)
       Future { SparkYarnApp.yarnClient }
     }
+
+    // Start the Hops certificate localization service
+    startCertificateLocalization(livyConf)
 
     if (livyConf.get(LivyConf.RECOVERY_STATE_STORE) == "zookeeper") {
       zkManager = Some(new ZooKeeperManager(livyConf))
@@ -385,6 +390,21 @@ class LivyServer extends Logging {
           }
         }
       }, refreshInterval, TimeUnit.MILLISECONDS)
+  }
+
+  def startCertificateLocalization(livyConf: LivyConf): Unit = {
+    // Create an instance of the CertificateLocalizationService to keep the track
+    // of the certificates sent by the users
+    val certLocService =
+    new CertificateLocalizationService(CertificateLocalizationService.ServiceType.LIVY)
+    certLocService.init(livyConf.hadoopConf)
+    certLocService.start()
+    CertificateLocalizationCtx.getInstance.setCertificateLocalization(certLocService)
+
+    // Add shutdown hook to shutdown the CertificateLocalizationService
+    ShutdownHookManager.get.addShutdownHook(new Runnable {
+      override def run(): Unit = certLocService.stop()
+    }, 10)
   }
 
   def join(): Unit = server.join()

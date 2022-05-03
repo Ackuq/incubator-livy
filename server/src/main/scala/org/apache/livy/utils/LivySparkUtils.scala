@@ -30,9 +30,9 @@ object LivySparkUtils extends Logging {
   // For each Spark version we supported, we need to add this mapping relation in case Scala
   // version cannot be detected from "spark-submit --version".
   private val _defaultSparkScalaVersion = SortedMap(
-    // Spark 3.0 + Scala 2.12
+    // Spark 3.2 + Scala 2.12
     (3, 2) -> "2.12",
-    // Spark 3.0 + Scala 2.12
+    // Spark 3.1 + Scala 2.12
     (3, 1) -> "2.12",
     // Spark 3.0 + Scala 2.12
     (3, 0) -> "2.12",
